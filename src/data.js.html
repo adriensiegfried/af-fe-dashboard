@@ -1,0 +1,157 @@
+<script>
+/**
+ * AF Family Engagement Dashboard — data.js
+ * Client-side data helpers, color logic, and formatting utilities.
+ */
+
+const DATA = JSON.parse(document.getElementById('dashboard-data').textContent);
+
+// ── Color & Status Logic ──────────────────────────────────────────────────────
+
+const GOALS = DATA.config.goals;
+const TYPO = DATA.config.typology;
+
+function surveyColor(pct) {
+  if (pct >= (GOALS.survey_participation_goal || 0.75)) return '#2E7D52';
+  if (pct >= (GOALS.survey_participation_directional || 0.65)) return '#D97706';
+  return '#C94136';
+}
+
+function surveyBg(pct) {
+  if (pct >= (GOALS.survey_participation_goal || 0.75)) return '#F0FDF4';
+  if (pct >= (GOALS.survey_participation_directional || 0.65)) return '#FEF3C7';
+  return '#FEE2E2';
+}
+
+function surveyLabel(pct) {
+  if (pct >= (GOALS.survey_participation_goal || 0.75)) return '✓ Valid';
+  if (pct >= (GOALS.survey_participation_directional || 0.65)) return '~ Directional';
+  return '✗ Invalid';
+}
+
+function adaColor(pct) {
+  if (pct >= (GOALS.ada_goal || 0.93)) return '#2E7D52';
+  if (pct >= 0.90) return '#D97706';
+  return '#C94136';
+}
+
+function chronicColor(pct) {
+  if (pct <= (GOALS.chronic_absent_goal || 0.20)) return '#2E7D52';
+  if (pct <= 0.25) return '#D97706';
+  return '#C94136';
+}
+
+function flcColor(status) {
+  if (status === 'yes') return '#2E7D52';
+  if (status === 'in process') return '#D97706';
+  return '#C94136';
+}
+
+function flcLabel(status) {
+  if (status === 'yes') return '● Active';
+  if (status === 'in process') return '◐ In Process';
+  if (status === 'unsure') return '? Unsure';
+  return '○ No';
+}
+
+function typeColor(typeName) {
+  const t = TYPO[typeName];
+  return t ? t.color : '#6B7C93';
+}
+
+function typeBenchmark(typeName) {
+  const t = TYPO[typeName];
+  if (!t) return { lo: 0, hi: 1, type: 'pct' };
+  return {
+    lo: t.benchmark_lo || 0,
+    hi: t.benchmark_hi || 1,
+    type: t.benchmark_type || 'pct',
+  };
+}
+
+function benchmarkColor(pct, typeName) {
+  const b = typeBenchmark(typeName);
+  if (b.type === 'count') {
+    // Count-based: compare raw number
+    if (pct >= b.hi) return '#2E7D52';
+    if (pct >= b.lo) return '#D97706';
+    return '#C94136';
+  }
+  if (pct >= b.lo) return '#2E7D52';
+  if (pct >= b.lo * 0.7) return '#D97706';
+  return '#C94136';
+}
+
+// ── Formatting ────────────────────────────────────────────────────────────────
+
+function fmtPct(val, decimals = 0) {
+  if (val === '' || val === null || val === undefined) return '—';
+  const n = typeof val === 'number' ? val : parseFloat(val);
+  if (isNaN(n)) return '—';
+  // If value is already 0-1, multiply by 100
+  const pct = n <= 1 && n > 0 ? n * 100 : n;
+  return pct.toFixed(decimals) + '%';
+}
+
+function fmtPctRaw(val) {
+  // Returns the raw percentage number (0-100 scale) for bar widths
+  if (val === '' || val === null || val === undefined) return 0;
+  const n = typeof val === 'number' ? val : parseFloat(val);
+  if (isNaN(n)) return 0;
+  return n <= 1 ? n * 100 : n;
+}
+
+function fmtDate(dateStr) {
+  if (!dateStr) return '—';
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const d = new Date(dateStr);
+  if (isNaN(d)) return dateStr;
+  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
+function fmtNum(val) {
+  if (val === '' || val === null || val === undefined) return '—';
+  const n = typeof val === 'number' ? val : parseInt(val);
+  if (isNaN(n)) return '—';
+  return n.toLocaleString();
+}
+
+// ── Data Access Helpers ───────────────────────────────────────────────────────
+
+function schoolsByRegion(region) {
+  if (region === 'All') return DATA.schools;
+  return DATA.schools.filter(s => s.state === region);
+}
+
+function schoolsByLevel(schools, level) {
+  if (level === 'All') return schools;
+  return schools.filter(s => s.level === level);
+}
+
+function regionAvg(schools, field) {
+  const vals = schools.map(s => {
+    const v = typeof s[field] === 'number' ? s[field] : parseFloat(s[field]);
+    return isNaN(v) ? null : v;
+  }).filter(v => v !== null);
+  if (vals.length === 0) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+function regionSurveyAvg(schools, cycle, field) {
+  const vals = [];
+  for (const s of schools) {
+    const survey = s.surveys.find(sv => sv.cycle === cycle);
+    if (survey && survey[field] !== '' && survey[field] !== null) {
+      const v = typeof survey[field] === 'number' ? survey[field] : parseFloat(survey[field]);
+      if (!isNaN(v)) vals.push(v);
+    }
+  }
+  if (vals.length === 0) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+const REGIONS = ['NY', 'CT', 'RI'];
+const LEVELS = ['Elementary', 'Middle', 'High'];
+const REGION_NAMES = { NY: 'New York', CT: 'Connecticut', RI: 'Rhode Island' };
+const REGION_COLORS = { NY: '#0A1F5C', CT: '#006B3C', RI: '#7B2D8B' };
+</script>

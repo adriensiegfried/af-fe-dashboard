@@ -1,0 +1,482 @@
+<script>
+/**
+ * AF Family Engagement Dashboard — app.js
+ * Main application logic: tab switching, view rendering, state management.
+ */
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
+let currentTab = 'overview';
+let filterRegion = 'All';
+let filterLevel = 'All';
+let sortBy = 'name';
+let selectedSchoolId = null;
+
+// ── Tab Switching ─────────────────────────────────────────────────────────────
+
+function showTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    if (b.textContent.toLowerCase().includes(tab === 'overview' ? 'network' : tab === 'detail' ? 'school' : tab))
+      b.classList.add('active');
+  });
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  render();
+}
+
+function render() {
+  switch (currentTab) {
+    case 'overview': renderOverview(); break;
+    case 'survey': renderSurvey(); break;
+    case 'events': renderEvents(); break;
+    case 'compliance': renderCompliance(); break;
+    case 'detail': renderDetail(); break;
+  }
+}
+
+function setFilter(type, value) {
+  if (type === 'region') filterRegion = value;
+  if (type === 'level') filterLevel = value;
+  render();
+}
+
+function filterByRegion(region) {
+  filterRegion = region;
+  render();
+}
+
+function goToSchool(acronym) {
+  selectedSchoolId = acronym;
+  showTab('detail');
+}
+
+function getFilteredSchools() {
+  let schools = DATA.schools;
+  if (filterRegion !== 'All') schools = schools.filter(s => s.state === filterRegion);
+  if (filterLevel !== 'All') schools = schools.filter(s => s.level === filterLevel);
+  return schools;
+}
+
+// ── Render: Network Overview ──────────────────────────────────────────────────
+
+function renderOverview() {
+  const all = DATA.schools;
+  const filtered = getFilteredSchools();
+  
+  // KPIs (network-wide)
+  const latestParts = all.map(s => s.latestSurvey?.participation_pct).filter(v => v != null && v !== '');
+  const avgPart = latestParts.length ? latestParts.reduce((a, b) => a + b, 0) / latestParts.length : 0;
+  const validCount = latestParts.filter(p => p >= (GOALS.survey_participation_goal || 0.75)).length;
+  const fuCount = all.filter(s => s.latestSurvey?.followup_sent === 'yes').length;
+  const latestFavs = all.map(s => s.latestSurvey?.favorability_pct).filter(v => v != null && v !== '');
+  const avgFav = latestFavs.length ? latestFavs.reduce((a, b) => a + b, 0) / latestFavs.length : 0;
+  const flcActive = all.filter(s => s.flc_status === 'yes').length;
+  const totalEvents = all.reduce((a, s) => a + s.eventCount, 0);
+  
+  const kpis = `
+    <div class="kpi-strip">
+      ${renderKPI('Network Avg — Latest Survey', fmtPct(avgPart), `${validCount}/${all.length} at ${fmtPct(GOALS.survey_participation_goal)} goal`, surveyColor(avgPart))}
+      ${renderKPI('Schools at Valid Threshold', `${validCount} / ${all.length}`, 'Latest survey cycle', validCount >= all.length * 0.7 ? '#2E7D52' : '#D97706')}
+      ${renderKPI('Follow-Up Compliance', `${fuCount} / ${all.length}`, '30-day follow-up sent', fuCount >= all.length * 0.8 ? '#2E7D52' : '#C94136')}
+      ${renderKPI('Total Events Logged', totalEvents, 'All schools · all typologies', '#0082CA')}
+      ${renderKPI('FLC Adoption', `${flcActive} / ${all.length}`, `${Math.round(flcActive / all.length * 100)}% of schools`, flcActive >= all.length * 0.7 ? '#2E7D52' : '#D97706')}
+    </div>`;
+  
+  // Region cards
+  const regionCards = `
+    <div class="grid-3" style="margin-bottom:20px">
+      ${REGIONS.map(r => renderRegionCard(r, schoolsByRegion(r))).join('')}
+    </div>`;
+  
+  // Filter bar
+  const filterBar = `
+    <div class="filter-bar">
+      <span class="filter-label">Region:</span>
+      ${['All', ...REGIONS].map(r => 
+        `<button class="pill ${filterRegion === r ? 'active' : ''}" onclick="setFilter('region','${r}')">${r === 'All' ? 'All' : REGION_NAMES[r]}</button>`
+      ).join('')}
+      <span class="filter-label" style="margin-left:12px">Level:</span>
+      ${['All', ...LEVELS].map(l => 
+        `<button class="pill ${filterLevel === l ? 'active-blue' : ''}" onclick="setFilter('level','${l}')">${l}</button>`
+      ).join('')}
+    </div>`;
+  
+  // School table
+  const sortedSchools = [...filtered].sort((a, b) => a.school_name.localeCompare(b.school_name));
+  const tableRows = sortedSchools.map(s => renderSchoolRow(s, `goToSchool('${s.acronym}')`)).join('');
+  
+  const table = `
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>School</th><th>Region</th><th>Level</th>
+            <th style="text-align:center">ADA</th>
+            <th style="text-align:center">Chr. Absent</th>
+            <th style="text-align:center">Latest Survey</th>
+            <th style="text-align:center">Fav.</th>
+            <th style="text-align:center">Trend</th>
+            <th style="text-align:center">FLC</th>
+            <th style="text-align:center">Events</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>`;
+  
+  // Narratives (bright spots + concerns)
+  const brightSpots = DATA.narratives.filter(n => n.type === 'bright_spot');
+  const concerns = DATA.narratives.filter(n => n.type === 'concern');
+  
+  const narrativesHtml = `
+    <div class="grid-2" style="margin-top:20px">
+      <div class="panel">
+        <div class="panel-header" style="background:#14532D"><span class="panel-title">⭐ Bright Spots</span></div>
+        <div style="padding:14px">
+          ${brightSpots.map(n => `
+            <div class="flag-bright">
+              <div style="display:flex;justify-content:space-between">
+                <span style="font-weight:700;color:#065F46;font-size:13px">${n.school}</span>
+                ${renderBadge(n.region, REGION_COLORS[n.region])}
+              </div>
+              <div style="font-size:12px;color:#065F46;margin-top:4px">${n.text}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header" style="background:#7F1D1D"><span class="panel-title">⚠️ Concerns</span></div>
+        <div style="padding:14px">
+          ${concerns.map(n => `
+            <div class="flag-concern">
+              <div style="display:flex;justify-content:space-between">
+                <span style="font-weight:700;color:#991B1B;font-size:13px">${n.school}</span>
+                ${renderBadge(n.region, REGION_COLORS[n.region])}
+              </div>
+              <div style="font-size:12px;color:#991B1B;margin-top:4px">${n.text}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>`;
+  
+  document.getElementById('tab-overview').innerHTML = kpis + regionCards + filterBar + table + narrativesHtml;
+}
+
+// ── Render: Survey Deep Dive ──────────────────────────────────────────────────
+
+function renderSurvey() {
+  const filtered = getFilteredSchools();
+  const cycles = ['September', 'December'];
+  
+  // Filter bar
+  const filterBar = `
+    <div class="filter-bar">
+      <span class="filter-label">Region:</span>
+      ${['All', ...REGIONS].map(r => 
+        `<button class="pill ${filterRegion === r ? 'active' : ''}" onclick="setFilter('region','${r}')">${r === 'All' ? 'All' : REGION_NAMES[r]}</button>`
+      ).join('')}
+    </div>`;
+  
+  // Survey comparison table
+  const rows = filtered.map(s => {
+    const s1 = s.surveys.find(sv => sv.cycle === 'September') || {};
+    const s2 = s.surveys.find(sv => sv.cycle === 'December') || {};
+    const trend = (s2.participation_pct && s1.participation_pct) 
+      ? Math.round((s2.participation_pct - s1.participation_pct) * 100) 
+      : null;
+    const trendHtml = trend !== null
+      ? `<span style="font-weight:700;color:${trend >= 0 ? '#2E7D52' : '#C94136'}">${trend >= 0 ? '▲' : '▼'} ${Math.abs(trend)}pp</span>`
+      : '—';
+    
+    return `<tr onclick="goToSchool('${s.acronym}')" style="cursor:pointer">
+      <td style="font-weight:700">${s.school_name}</td>
+      <td>${renderBadge(s.state, REGION_COLORS[s.state])}</td>
+      <td style="text-align:center">${s1.participation_pct != null ? renderBadge(fmtPct(s1.participation_pct), surveyColor(s1.participation_pct), surveyBg(s1.participation_pct)) : '—'}</td>
+      <td style="text-align:center">${s1.favorability_pct != null ? `<span style="font-weight:600">${fmtPct(s1.favorability_pct)}</span>` : '—'}</td>
+      <td style="text-align:center;font-weight:700;color:${s1.followup_sent === 'yes' ? '#2E7D52' : '#C94136'}">${s1.followup_sent === 'yes' ? '✓' : '✗'}</td>
+      <td style="text-align:center">${s2.participation_pct != null ? renderBadge(fmtPct(s2.participation_pct), surveyColor(s2.participation_pct), surveyBg(s2.participation_pct)) : '—'}</td>
+      <td style="text-align:center">${s2.favorability_pct != null ? `<span style="font-weight:600">${fmtPct(s2.favorability_pct)}</span>` : '—'}</td>
+      <td style="text-align:center;font-weight:700;color:${s2.followup_sent === 'yes' ? '#2E7D52' : '#C94136'}">${s2.followup_sent === 'yes' ? '✓' : '✗'}</td>
+      <td style="text-align:center">${trendHtml}</td>
+    </tr>`;
+  }).join('');
+  
+  const table = `
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>School</th><th>Region</th>
+            <th style="text-align:center">Sept Part.</th><th style="text-align:center">Sept Fav.</th><th style="text-align:center">Sept F/U</th>
+            <th style="text-align:center">Dec Part.</th><th style="text-align:center">Dec Fav.</th><th style="text-align:center">Dec F/U</th>
+            <th style="text-align:center">Trend</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  
+  // Legend
+  const legend = `
+    <div style="display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--muted);flex-wrap:wrap">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#2E7D52;margin-right:4px"></span>≥75% Valid</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#D97706;margin-right:4px"></span>65–74% Directional</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#C94136;margin-right:4px"></span>&lt;65% Invalid</span>
+      <span style="margin-left:auto;font-style:italic">Click any row to view school detail</span>
+    </div>`;
+  
+  document.getElementById('tab-survey').innerHTML = `
+    <div class="section-header"><div class="section-title">Survey Participation & Favorability</div><div class="section-sub">All schools · Sept & Dec cycles</div></div>
+    ${filterBar}${table}${legend}`;
+}
+
+// ── Render: Event Attendance ──────────────────────────────────────────────────
+
+function renderEvents() {
+  const filtered = getFilteredSchools();
+  const allEvents = filtered.flatMap(s => s.events);
+  
+  // Filter bar
+  const filterBar = `
+    <div class="filter-bar">
+      <span class="filter-label">Region:</span>
+      ${['All', ...REGIONS].map(r => 
+        `<button class="pill ${filterRegion === r ? 'active' : ''}" onclick="setFilter('region','${r}')">${r === 'All' ? 'All' : REGION_NAMES[r]}</button>`
+      ).join('')}
+    </div>`;
+  
+  // Category summary cards (4 pct-based + 1 count-based)
+  const typeNames = Object.keys(TYPO);
+  const typeCards = typeNames.map(typeName => {
+    const evts = allEvents.filter(e => e.event_type === typeName);
+    const b = typeBenchmark(typeName);
+    const color = typeColor(typeName);
+    
+    if (b.type === 'count') {
+      // Enrollment: count-only
+      const totalAttended = evts.reduce((a, e) => a + (e.families_attended || 0), 0);
+      return `
+        <div class="card" style="border-top:3px solid ${color}">
+          <div style="font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">${typeName}</div>
+          <div style="font-size:26px;font-weight:800;color:${color}">${evts.length}</div>
+          <div style="font-size:11px;color:var(--muted)">events · ${fmtNum(totalAttended)} families reached</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">Benchmark: ${b.lo}–${b.hi} families/event</div>
+        </div>`;
+    }
+    
+    // Percentage-based types
+    const pcts = evts.filter(e => e.pct_attended).map(e => e.pct_attended);
+    const avgPct = pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : 0;
+    const schoolCount = new Set(evts.map(e => e.acronym)).size;
+    
+    return `
+      <div class="card" style="border-top:3px solid ${color}">
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">${typeName}</div>
+        <div style="font-size:26px;font-weight:800;color:${color}">${fmtPct(avgPct)}</div>
+        <div style="font-size:11px;color:var(--muted)">${evts.length} events · ${schoolCount} schools</div>
+        ${renderBar(avgPct, benchmarkColor(avgPct, typeName), 6)}
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">Benchmark: ${fmtPct(b.lo)}–${fmtPct(b.hi)}</div>
+      </div>`;
+  }).join('');
+  
+  // School-level event table
+  const schoolRows = filtered.map(s => {
+    if (s.eventCount === 0) return '';
+    const cells = typeNames.map(t => {
+      const evts = s.events.filter(e => e.event_type === t);
+      if (evts.length === 0) return '<td style="text-align:center;color:var(--muted)">—</td>';
+      const b = typeBenchmark(t);
+      if (b.type === 'count') {
+        const total = evts.reduce((a, e) => a + (e.families_attended || 0), 0);
+        return `<td style="text-align:center;font-weight:600;color:${typeColor(t)}">${fmtNum(total)} (${evts.length})</td>`;
+      }
+      const pcts = evts.filter(e => e.pct_attended).map(e => e.pct_attended);
+      const avg = pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : 0;
+      return `<td style="text-align:center;font-weight:600;color:${benchmarkColor(avg, t)}">${fmtPct(avg)} (${evts.length})</td>`;
+    }).join('');
+    
+    return `<tr onclick="goToSchool('${s.acronym}')" style="cursor:pointer">
+      <td style="font-weight:700">${s.school_name} <span style="font-size:9px;color:var(--muted)">${s.state}</span></td>
+      ${cells}
+    </tr>`;
+  }).filter(Boolean).join('');
+  
+  const schoolTable = `
+    <div class="card" style="padding:0;overflow-x:auto;margin-top:20px">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>School</th>
+            ${typeNames.map(t => `<th style="text-align:center">${t}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>${schoolRows}</tbody>
+      </table>
+    </div>`;
+  
+  document.getElementById('tab-events').innerHTML = `
+    <div class="section-header"><div class="section-title">Event Attendance by Typology</div><div class="section-sub">${allEvents.length} events across ${filtered.length} schools</div></div>
+    ${filterBar}
+    <div class="grid-5">${typeCards}</div>
+    ${schoolTable}`;
+}
+
+// ── Render: Compliance Tracker ────────────────────────────────────────────────
+
+function renderCompliance() {
+  const filtered = getFilteredSchools();
+  
+  const filterBar = `
+    <div class="filter-bar">
+      <span class="filter-label">Region:</span>
+      ${['All', ...REGIONS].map(r => 
+        `<button class="pill ${filterRegion === r ? 'active' : ''}" onclick="setFilter('region','${r}')">${r === 'All' ? 'All' : REGION_NAMES[r]}</button>`
+      ).join('')}
+    </div>`;
+  
+  const items = [
+    { key: 'welcome_calls_pct', label: 'Welcome Calls', check: v => v >= 0.70 },
+    { key: 'newsletter_cadence', label: 'Newsletters', check: v => ['weekly', 'bi-weekly'].includes(String(v).toLowerCase()) },
+    { key: 'flc_status', label: 'FLC Active', check: v => v === 'yes' },
+    { key: 'unit_letters_sent', label: 'Unit Letters', check: v => String(v).toLowerCase() === 'yes' },
+    { key: 'title1_meeting_held', label: 'Title I Meeting', check: v => String(v).toLowerCase() === 'yes' },
+    { key: 'two_acad_events', label: '2+ Acad Events', check: v => String(v).toLowerCase() === 'yes' },
+  ];
+  
+  // Summary row
+  const summaryHtml = items.map(item => {
+    const met = filtered.filter(s => item.check(s[item.key])).length;
+    const pct = Math.round(met / filtered.length * 100);
+    const color = pct >= 75 ? '#2E7D52' : pct >= 50 ? '#D97706' : '#C94136';
+    return `
+      <div class="card" style="text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">${item.label}</div>
+        <div style="font-size:24px;font-weight:800;color:${color}">${pct}%</div>
+        <div style="font-size:11px;color:var(--muted)">${met}/${filtered.length} schools</div>
+        ${renderBar(pct / 100, color, 6)}
+      </div>`;
+  }).join('');
+  
+  // School rows
+  const rows = filtered.map(s => {
+    const cells = items.map(item => {
+      const met = item.check(s[item.key]);
+      const bg = met ? '#2E7D52' : '#C94136';
+      const sym = met ? '✓' : '✗';
+      let detail = '';
+      if (item.key === 'welcome_calls_pct') detail = fmtPct(s[item.key]);
+      else if (item.key === 'flc_status') detail = flcLabel(s[item.key]);
+      else if (item.key === 'newsletter_cadence') detail = s[item.key] || '—';
+      return `<td style="text-align:center"><span class="comp-dot" style="background:${bg}">${sym}</span><div style="font-size:9px;color:var(--muted);margin-top:2px">${detail}</div></td>`;
+    }).join('');
+    
+    return `<tr onclick="goToSchool('${s.acronym}')" style="cursor:pointer">
+      <td style="font-weight:700">${s.school_name} <span style="font-size:9px;color:var(--muted)">${s.state}</span></td>
+      ${cells}
+    </tr>`;
+  }).join('');
+  
+  const table = `
+    <div class="card" style="padding:0;overflow-x:auto;margin-top:16px">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>School</th>
+            ${items.map(i => `<th style="text-align:center">${i.label}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  
+  document.getElementById('tab-compliance').innerHTML = `
+    <div class="section-header"><div class="section-title">Non-Negotiable Compliance</div><div class="section-sub">${filtered.length} schools</div></div>
+    ${filterBar}
+    <div class="grid-${items.length}">${summaryHtml}</div>
+    ${table}`;
+}
+
+// ── Render: School Detail ─────────────────────────────────────────────────────
+
+function renderDetail() {
+  // School picker
+  const schools = getFilteredSchools();
+  if (!selectedSchoolId && schools.length > 0) selectedSchoolId = schools[0].acronym;
+  const school = DATA.schools.find(s => s.acronym === selectedSchoolId);
+  if (!school) {
+    document.getElementById('tab-detail').innerHTML = '<p style="color:var(--muted);padding:40px;text-align:center">Select a school from the Network Overview table.</p>';
+    return;
+  }
+  
+  const picker = `
+    <div class="school-picker">
+      ${DATA.schools.map(s => {
+        const active = s.acronym === selectedSchoolId;
+        const borderColor = active ? '#0082CA' : s.flag === 'concern' ? '#C94136' : s.flag === 'bright_spot' ? '#2E7D52' : '#D1D5DB';
+        return `<button class="pill" style="border-color:${borderColor};${active ? 'background:#0082CA;color:white' : ''}" onclick="selectedSchoolId='${s.acronym}';renderDetail()">${s.acronym}</button>`;
+      }).join('')}
+    </div>`;
+  
+  // Header
+  const hdrBg = school.flag === 'concern' ? '#C94136' : school.flag === 'bright_spot' ? '#14532D' : 'var(--navy)';
+  const header = `
+    <div style="background:${hdrBg};border-radius:12px;padding:18px 22px;color:white;margin-bottom:16px">
+      <div style="font-size:10px;opacity:0.6;text-transform:uppercase;letter-spacing:1.5px">${school.acronym} · ${school.level} · ${school.state} · ${fmtNum(school.family_count)} families</div>
+      <div style="font-size:20px;font-weight:800;margin-top:4px">${school.school_name}</div>
+      ${school.flagNote ? `<div style="font-size:11px;opacity:0.8;margin-top:6px;font-style:italic">${school.flagNote}</div>` : ''}
+    </div>`;
+  
+  // Survey bars
+  const surveyHtml = school.surveys.map(sv => 
+    renderSurveyBar(sv.cycle, sv.participation_pct, sv.favorability_pct, sv.followup_sent)
+  ).join('');
+  
+  // Compliance
+  const compItems = [
+    { label: 'Welcome Calls', met: school.welcome_calls_pct >= 0.70, detail: fmtPct(school.welcome_calls_pct) },
+    { label: 'Newsletters', met: ['weekly', 'bi-weekly'].includes(String(school.newsletter_cadence).toLowerCase()), detail: school.newsletter_cadence || '—' },
+    { label: 'FLC Active', met: school.flc_status === 'yes' ? true : school.flc_status === 'in process' ? null : false, detail: flcLabel(school.flc_status) },
+    { label: 'Unit Letters', met: String(school.unit_letters_sent).toLowerCase() === 'yes', detail: school.unit_letters_sent || '—' },
+    { label: 'Title I Meeting', met: String(school.title1_meeting_held).toLowerCase() === 'yes', detail: school.title1_meeting_held || '—' },
+    { label: 'Survey Follow-Up', met: school.latestSurvey?.followup_sent === 'yes', detail: school.latestSurvey?.followup_sent === 'yes' ? 'Sent' : 'Not sent' },
+    { label: 'Events Logged', met: school.eventCount >= 4, detail: `${school.eventCount} events` },
+  ];
+  const compHtml = compItems.map(c => renderCompRow(c.label, c.met, c.detail)).join('');
+  
+  // Events
+  const sortedEvents = [...school.events].sort((a, b) => {
+    if (a.event_type === 'Enrollment' && b.event_type !== 'Enrollment') return 1;
+    if (a.event_type !== 'Enrollment' && b.event_type === 'Enrollment') return -1;
+    return (b.pct_attended || 0) - (a.pct_attended || 0);
+  });
+  const eventsHtml = sortedEvents.map(ev => renderEventCard(ev)).join('');
+  
+  document.getElementById('tab-detail').innerHTML = `
+    ${picker}${header}
+    <div class="detail-grid">
+      <div>
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-title">Survey History</div>
+          ${surveyHtml || '<div style="color:var(--muted);font-style:italic">No survey data</div>'}
+        </div>
+        <div class="card">
+          <div class="card-title">Non-Negotiable Compliance</div>
+          ${compHtml}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Events — ${school.eventCount} logged</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:600px;overflow-y:auto">
+          ${eventsHtml || '<div style="color:var(--muted);font-style:italic;grid-column:1/-1;text-align:center;padding:24px">No events logged</div>'}
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Initialize ────────────────────────────────────────────────────────────────
+
+render();
+</script>
