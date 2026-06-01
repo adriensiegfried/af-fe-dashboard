@@ -17,10 +17,8 @@ let selectedSchoolId = null;
 function showTab(tab) {
   currentTab = tab;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b => {
-    if (b.textContent.toLowerCase().includes(tab === 'overview' ? 'network' : tab === 'detail' ? 'school' : tab))
-      b.classList.add('active');
-  });
+  const activeBtn = document.querySelector(`.nav-btn[data-tab="${tab}"]`);
+  if (activeBtn) activeBtn.classList.add('active');
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   render();
@@ -169,56 +167,77 @@ function renderOverview() {
 
 function renderSurvey() {
   const filtered = getFilteredSchools();
-  const cycles = ['September', 'December'];
-  
+
+  // Derive cycles from the actual data (preserves order: Sept → Dec → April, etc.)
+  const CYCLE_ORDER = ['September', 'December', 'April', 'Spring'];
+  const allCycles = [...new Set(filtered.flatMap(s => s.surveys.map(sv => sv.cycle)))];
+  const cycles = allCycles.sort((a, b) => {
+    const ai = CYCLE_ORDER.indexOf(a);
+    const bi = CYCLE_ORDER.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+
   // Filter bar
   const filterBar = `
     <div class="filter-bar">
       <span class="filter-label">Region:</span>
-      ${['All', ...REGIONS].map(r => 
+      ${['All', ...REGIONS].map(r =>
         `<button class="pill ${filterRegion === r ? 'active' : ''}" onclick="setFilter('region','${r}')">${r === 'All' ? 'All' : REGION_NAMES[r]}</button>`
       ).join('')}
     </div>`;
-  
-  // Survey comparison table
+
+  // Build table headers dynamically
+  const cycleHeaders = cycles.map(c => {
+    const label = c.length > 5 ? c.substring(0, 3) : c;
+    return `<th style="text-align:center">${label} Part.</th><th style="text-align:center">${label} Fav.</th><th style="text-align:center">${label} F/U</th>`;
+  }).join('');
+
+  // Build trend (compare last two cycles if available)
+  function getTrend(s) {
+    if (cycles.length < 2) return null;
+    const prev = s.surveys.find(sv => sv.cycle === cycles[cycles.length - 2]);
+    const curr = s.surveys.find(sv => sv.cycle === cycles[cycles.length - 1]);
+    if (!prev?.participation_pct || !curr?.participation_pct) return null;
+    return Math.round((curr.participation_pct - prev.participation_pct) * 100);
+  }
+
+  // Table rows
   const rows = filtered.map(s => {
-    const s1 = s.surveys.find(sv => sv.cycle === 'September') || {};
-    const s2 = s.surveys.find(sv => sv.cycle === 'December') || {};
-    const trend = (s2.participation_pct && s1.participation_pct) 
-      ? Math.round((s2.participation_pct - s1.participation_pct) * 100) 
-      : null;
+    const trend = getTrend(s);
     const trendHtml = trend !== null
       ? `<span style="font-weight:700;color:${trend >= 0 ? '#2E7D52' : '#C94136'}">${trend >= 0 ? '▲' : '▼'} ${Math.abs(trend)}pp</span>`
       : '—';
-    
+
+    const cycleCells = cycles.map(c => {
+      const sv = s.surveys.find(sv => sv.cycle === c) || {};
+      return `
+        <td style="text-align:center">${sv.participation_pct != null ? renderBadge(fmtPct(sv.participation_pct), surveyColor(sv.participation_pct), surveyBg(sv.participation_pct)) : '—'}</td>
+        <td style="text-align:center">${sv.favorability_pct != null ? `<span style="font-weight:600;opacity:${sv.participation_pct >= 0.65 ? 1 : 0.35}">${fmtPct(sv.favorability_pct)}</span>` : '—'}</td>
+        <td style="text-align:center;font-weight:700;color:${sv.followup_sent === 'yes' ? '#2E7D52' : '#C94136'}">${sv.followup_sent === 'yes' ? '✓' : sv.followup_sent ? '✗' : '—'}</td>`;
+    }).join('');
+
     return `<tr onclick="goToSchool('${s.acronym}')" style="cursor:pointer">
       <td style="font-weight:700">${s.school_name}</td>
       <td>${renderBadge(s.state, REGION_COLORS[s.state])}</td>
-      <td style="text-align:center">${s1.participation_pct != null ? renderBadge(fmtPct(s1.participation_pct), surveyColor(s1.participation_pct), surveyBg(s1.participation_pct)) : '—'}</td>
-      <td style="text-align:center">${s1.favorability_pct != null ? `<span style="font-weight:600">${fmtPct(s1.favorability_pct)}</span>` : '—'}</td>
-      <td style="text-align:center;font-weight:700;color:${s1.followup_sent === 'yes' ? '#2E7D52' : '#C94136'}">${s1.followup_sent === 'yes' ? '✓' : '✗'}</td>
-      <td style="text-align:center">${s2.participation_pct != null ? renderBadge(fmtPct(s2.participation_pct), surveyColor(s2.participation_pct), surveyBg(s2.participation_pct)) : '—'}</td>
-      <td style="text-align:center">${s2.favorability_pct != null ? `<span style="font-weight:600">${fmtPct(s2.favorability_pct)}</span>` : '—'}</td>
-      <td style="text-align:center;font-weight:700;color:${s2.followup_sent === 'yes' ? '#2E7D52' : '#C94136'}">${s2.followup_sent === 'yes' ? '✓' : '✗'}</td>
+      ${cycleCells}
       <td style="text-align:center">${trendHtml}</td>
     </tr>`;
   }).join('');
-  
+
   const table = `
     <div class="card" style="padding:0;overflow-x:auto">
       <table class="data-table">
         <thead>
           <tr>
             <th>School</th><th>Region</th>
-            <th style="text-align:center">Sept Part.</th><th style="text-align:center">Sept Fav.</th><th style="text-align:center">Sept F/U</th>
-            <th style="text-align:center">Dec Part.</th><th style="text-align:center">Dec Fav.</th><th style="text-align:center">Dec F/U</th>
+            ${cycleHeaders}
             <th style="text-align:center">Trend</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-  
+
   // Legend
   const legend = `
     <div style="display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--muted);flex-wrap:wrap">
@@ -227,9 +246,11 @@ function renderSurvey() {
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#C94136;margin-right:4px"></span>&lt;65% Invalid</span>
       <span style="margin-left:auto;font-style:italic">Click any row to view school detail</span>
     </div>`;
-  
+
+  const cycleLabel = cycles.length ? cycles.join(' & ') + ' cycles' : 'No survey data';
+
   document.getElementById('tab-survey').innerHTML = `
-    <div class="section-header"><div class="section-title">Survey Participation & Favorability</div><div class="section-sub">All schools · Sept & Dec cycles</div></div>
+    <div class="section-header"><div class="section-title">Survey Participation & Favorability</div><div class="section-sub">All schools · ${cycleLabel}</div></div>
     ${filterBar}${table}${legend}`;
 }
 
@@ -320,7 +341,7 @@ function renderEvents() {
   document.getElementById('tab-events').innerHTML = `
     <div class="section-header"><div class="section-title">Event Attendance by Typology</div><div class="section-sub">${allEvents.length} events across ${filtered.length} schools</div></div>
     ${filterBar}
-    <div class="grid-5">${typeCards}</div>
+    <div class="grid-${typeNames.length}">${typeCards}</div>
     ${schoolTable}`;
 }
 
@@ -339,7 +360,7 @@ function renderCompliance() {
   
   const items = [
     { key: 'welcome_calls_pct', label: 'Welcome Calls', check: v => v >= 0.70 },
-    { key: 'newsletter_cadence', label: 'Newsletters', check: v => ['weekly', 'bi-weekly'].includes(String(v).toLowerCase()) },
+    { key: 'newsletter_cadence', label: 'Newsletters', check: v => v && !/running/i.test(v) },
     { key: 'flc_status', label: 'FLC Active', check: v => v === 'yes' },
     { key: 'unit_letters_sent', label: 'Unit Letters', check: v => String(v).toLowerCase() === 'yes' },
     { key: 'title1_meeting_held', label: 'Title I Meeting', check: v => String(v).toLowerCase() === 'yes' },
@@ -403,8 +424,7 @@ function renderCompliance() {
 
 function renderDetail() {
   // School picker
-  const schools = getFilteredSchools();
-  if (!selectedSchoolId && schools.length > 0) selectedSchoolId = schools[0].acronym;
+  if (!selectedSchoolId && DATA.schools.length > 0) selectedSchoolId = DATA.schools[0].acronym;
   const school = DATA.schools.find(s => s.acronym === selectedSchoolId);
   if (!school) {
     document.getElementById('tab-detail').innerHTML = '<p style="color:var(--muted);padding:40px;text-align:center">Select a school from the Network Overview table.</p>';
@@ -437,12 +457,12 @@ function renderDetail() {
   // Compliance
   const compItems = [
     { label: 'Welcome Calls', met: school.welcome_calls_pct >= 0.70, detail: fmtPct(school.welcome_calls_pct) },
-    { label: 'Newsletters', met: ['weekly', 'bi-weekly'].includes(String(school.newsletter_cadence).toLowerCase()), detail: school.newsletter_cadence || '—' },
+    { label: 'Newsletters', met: !!(school.newsletter_cadence && !/running/i.test(school.newsletter_cadence)), detail: school.newsletter_cadence || '—' },
     { label: 'FLC Active', met: school.flc_status === 'yes' ? true : school.flc_status === 'in process' ? null : false, detail: flcLabel(school.flc_status) },
     { label: 'Unit Letters', met: String(school.unit_letters_sent).toLowerCase() === 'yes', detail: school.unit_letters_sent || '—' },
     { label: 'Title I Meeting', met: String(school.title1_meeting_held).toLowerCase() === 'yes', detail: school.title1_meeting_held || '—' },
     { label: 'Survey Follow-Up', met: school.latestSurvey?.followup_sent === 'yes', detail: school.latestSurvey?.followup_sent === 'yes' ? 'Sent' : 'Not sent' },
-    { label: 'Events Logged', met: school.eventCount >= 4, detail: `${school.eventCount} events` },
+    { label: 'Events Logged', met: school.eventCount > 0, detail: `${school.eventCount} events` },
   ];
   const compHtml = compItems.map(c => renderCompRow(c.label, c.met, c.detail)).join('');
   
