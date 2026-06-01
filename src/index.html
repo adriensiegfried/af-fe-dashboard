@@ -4,12 +4,15 @@
   <meta charset="UTF-8">
   <base target="_top">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAC5ElEQVR4nGPkl7H/zzCAgIUcTbwShnD25xfnKXIAEyWWY+PT1AG4LKPEESSPALXB0HHAs64nvTeLNvdik8MlTgxgRM6GuFL3s64nvVJlMsX41KGrIdkB2BISzGfEGvys60mvdLls0f///xnhFjAy/v////8jExPTP0kJkRcvXr4R//fvPxNMDSO/jP1/ZMtvFm1mUO/zxfAhseBZ15NeBkbmfyFrPNw+f/nKcfX6PVU2VpZfSXH+Jy9cuiVw7ORFfWT1KGngZtFmFJocoN6knraJdbLVhnK+tSpKsu8MdNVupCcFn7x1+yE3Hx/3z4qihAPsbKw/sToA5nPkECAVuDtbXH71+t0fsaDDTes377c00td48+jJC7Y9B06Z7Nh9zIyTg53R1cniAkw9CwMDJJhh0UBJ8DMwMDDw8nL/vXj5Fuv0voojPDxcLNdvPfg3Z9EGSw4O9u+/f/9m+/T5639REcFfMPXwEEC3jNwy/vWb92xcXJx/J85YIeHmbGm4dOV2ZQYGBoY/f/6w/v37j1lZUYbl7IXrohgOgFkKw8+6npCVt+/cfSzSF8t8aF/KkY0OXmmPHz5+LsvIyPj/z5+/LCpKsg9YWJgZL125rQFTT1ZtiAs863rSy8D04u+cUz42De2KFj9/3WdnYGBgYGFm/vP7zx/WqFCPB+s27eNG1kOVovhZ15NeWEEkVSJRdvz0Jfbq0uQTEmLCL1/M4u1hYWX5raQg/fDzl68MO/YcN2ViYvoH08uI7wWyrOsJnC1VJoPpW4QcvKBiYmL69+/fP6aMpOCDzWFMx+3yz4TcuPVA2N9G+cvnaXaXv379zw0rnPA6ANlyZEfALCZUOhJbNGNNA9gsh4mTU97jAzSpjkmpmKiSC14sgGdrhn+vzpNUK5KdBqD8YmTLYUAi4TWx9pOfCxgYUH1OriPwRgE2S6kNhk6bEBvAFcykpAGKQwDdMlIsZ2AgkAjpAYZ2GhgWDgAAlEZPyMzwLnUAAAAASUVORK5CYII=">
   <?!= include('styles') ?>
 </head>
 <body>
 
 <!-- Data payload (injected server-side) -->
-<script id="dashboard-data" type="application/json"><?= dashboardData ?></script>
+<script>
+  var DASHBOARD_DATA_RAW = <?!= dashboardData ?>;
+</script>
 
 <!-- Header -->
 <div class="header">
@@ -23,11 +26,11 @@
 
 <!-- Navigation -->
 <div class="nav">
-  <button class="nav-btn active" onclick="showTab('overview')">Network Overview</button>
-  <button class="nav-btn" onclick="showTab('survey')">Survey Deep Dive</button>
-  <button class="nav-btn" onclick="showTab('events')">Event Attendance</button>
-  <button class="nav-btn" onclick="showTab('compliance')">Compliance Tracker</button>
-  <button class="nav-btn" onclick="showTab('detail')">School Detail</button>
+  <button class="nav-btn active" data-tab="overview" onclick="showTab('overview')">Network Overview</button>
+  <button class="nav-btn" data-tab="survey" onclick="showTab('survey')">Survey Deep Dive</button>
+  <button class="nav-btn" data-tab="events" onclick="showTab('events')">Event Attendance</button>
+  <button class="nav-btn" data-tab="compliance" onclick="showTab('compliance')">Compliance Tracker</button>
+  <button class="nav-btn" data-tab="detail" onclick="showTab('detail')">School Detail</button>
 </div>
 
 <!-- Main Content -->

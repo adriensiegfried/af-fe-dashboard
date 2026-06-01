@@ -4,7 +4,7 @@
  * Client-side data helpers, color logic, and formatting utilities.
  */
 
-const DATA = JSON.parse(document.getElementById('dashboard-data').textContent);
+const DATA = typeof DASHBOARD_DATA_RAW === 'string' ? JSON.parse(DASHBOARD_DATA_RAW) : DASHBOARD_DATA_RAW;
 
 // ── Color & Status Logic ──────────────────────────────────────────────────────
 
@@ -88,13 +88,14 @@ function fmtPct(val, decimals = 0) {
   if (val === '' || val === null || val === undefined) return '—';
   const n = typeof val === 'number' ? val : parseFloat(val);
   if (isNaN(n)) return '—';
-  // If value is already 0-1, multiply by 100
-  const pct = n <= 1 && n > 0 ? n * 100 : n;
+  // Convention: values ≤ 1 are 0-1 scale (from Google Sheets); values > 1 are already percentages
+  // This correctly handles 0 (0%) and 1 (100%)
+  const pct = n <= 1 ? n * 100 : n;
   return pct.toFixed(decimals) + '%';
 }
 
 function fmtPctRaw(val) {
-  // Returns the raw percentage number (0-100 scale) for bar widths
+  // Returns the raw percentage number (0-100 scale) for bar widths and calculations
   if (val === '' || val === null || val === undefined) return 0;
   const n = typeof val === 'number' ? val : parseFloat(val);
   if (isNaN(n)) return 0;
