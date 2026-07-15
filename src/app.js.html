@@ -63,7 +63,10 @@ function renderOverview() {
   const all = DATA.schools;
   const filtered = getFilteredSchools();
   
-  // KPIs (network-wide)
+  // KPIs (network-wide). Survey- and compliance-driven KPIs show a neutral
+  // "no data yet" state rather than a red zero when the Sheet is empty (e.g. at
+  // the start of a fresh school year), so an empty dashboard reads as "not yet
+  // entered" instead of "failing".
   const latestParts = all.map(s => s.latestSurvey?.participation_pct).filter(v => v != null && v !== '');
   const avgPart = latestParts.length ? latestParts.reduce((a, b) => a + b, 0) / latestParts.length : 0;
   const validCount = latestParts.filter(p => p >= (GOALS.survey_participation_goal || 0.75)).length;
@@ -72,14 +75,29 @@ function renderOverview() {
   const avgFav = latestFavs.length ? latestFavs.reduce((a, b) => a + b, 0) / latestFavs.length : 0;
   const flcActive = all.filter(s => s.flc_status === 'yes').length;
   const totalEvents = all.reduce((a, s) => a + s.eventCount, 0);
-  
+
+  const hasSurvey = latestParts.length > 0;
+  const hasFlc = all.some(s => !isBlank(s.flc_status));
+
   const kpis = `
     <div class="kpi-strip">
-      ${renderKPI('Network Avg — Latest Survey', fmtPct(avgPart), `${validCount}/${all.length} at ${fmtPct(GOALS.survey_participation_goal)} goal`, surveyColor(avgPart))}
-      ${renderKPI('Schools at Valid Threshold', `${validCount} / ${all.length}`, 'Latest survey cycle', validCount >= all.length * 0.7 ? '#2E7D52' : '#D97706')}
-      ${renderKPI('Follow-Up Compliance', `${fuCount} / ${all.length}`, '30-day follow-up sent', fuCount >= all.length * 0.8 ? '#2E7D52' : '#C94136')}
-      ${renderKPI('Total Events Logged', totalEvents, 'All schools · all typologies', '#0082CA')}
-      ${renderKPI('FLC Adoption', `${flcActive} / ${all.length}`, `${Math.round(flcActive / all.length * 100)}% of schools`, flcActive >= all.length * 0.7 ? '#2E7D52' : '#D97706')}
+      ${renderKPI('Network Avg — Latest Survey',
+        hasSurvey ? fmtPct(avgPart) : '—',
+        hasSurvey ? `${validCount}/${all.length} at ${fmtPct(GOALS.survey_participation_goal)} goal` : 'No survey data yet',
+        hasSurvey ? surveyColor(avgPart) : NEUTRAL_COLOR)}
+      ${renderKPI('Schools at Valid Threshold',
+        hasSurvey ? `${validCount} / ${all.length}` : '—',
+        hasSurvey ? 'Latest survey cycle' : 'No survey data yet',
+        hasSurvey ? (validCount >= all.length * 0.7 ? '#2E7D52' : '#D97706') : NEUTRAL_COLOR)}
+      ${renderKPI('Follow-Up Compliance',
+        hasSurvey ? `${fuCount} / ${all.length}` : '—',
+        hasSurvey ? '30-day follow-up sent' : 'No survey data yet',
+        hasSurvey ? (fuCount >= all.length * 0.8 ? '#2E7D52' : '#C94136') : NEUTRAL_COLOR)}
+      ${renderKPI('Total Events Logged', totalEvents, 'All schools · all typologies', totalEvents > 0 ? '#0082CA' : NEUTRAL_COLOR)}
+      ${renderKPI('FLC Adoption',
+        hasFlc ? `${flcActive} / ${all.length}` : '—',
+        hasFlc ? `${Math.round(flcActive / all.length * 100)}% of schools` : 'No data yet',
+        hasFlc ? (flcActive >= all.length * 0.7 ? '#2E7D52' : '#D97706') : NEUTRAL_COLOR)}
     </div>`;
   
   // Region cards
@@ -133,6 +151,7 @@ function renderOverview() {
       <div class="panel">
         <div class="panel-header" style="background:#14532D"><span class="panel-title">⭐ Bright Spots</span></div>
         <div style="padding:14px">
+          ${brightSpots.length === 0 ? '<div style="color:var(--muted);font-style:italic;font-size:12px;padding:8px">No bright spots logged yet</div>' : ''}
           ${brightSpots.map(n => `
             <div class="flag-bright">
               <div style="display:flex;justify-content:space-between">
@@ -147,6 +166,7 @@ function renderOverview() {
       <div class="panel">
         <div class="panel-header" style="background:#7F1D1D"><span class="panel-title">⚠️ Concerns</span></div>
         <div style="padding:14px">
+          ${concerns.length === 0 ? '<div style="color:var(--muted);font-style:italic;font-size:12px;padding:8px">No concerns logged yet</div>' : ''}
           ${concerns.map(n => `
             <div class="flag-concern">
               <div style="display:flex;justify-content:space-between">
@@ -367,8 +387,20 @@ function renderCompliance() {
     { key: 'two_acad_events', label: '2+ Acad Events', check: v => String(v).toLowerCase() === 'yes' },
   ];
   
-  // Summary row
+  // Summary row. When no school has entered a value for an item yet, show a
+  // neutral "No data yet" tile instead of a red 0% — an empty tracker should
+  // read as unstarted, not failing.
   const summaryHtml = items.map(item => {
+    const entered = filtered.filter(s => !isBlank(s[item.key])).length;
+    if (entered === 0) {
+      return `
+        <div class="card" style="text-align:center">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">${item.label}</div>
+          <div style="font-size:24px;font-weight:800;color:${NEUTRAL_COLOR}">—</div>
+          <div style="font-size:11px;color:var(--muted)">No data yet</div>
+          ${renderBar(0, NEUTRAL_DOT, 6)}
+        </div>`;
+    }
     const met = filtered.filter(s => item.check(s[item.key])).length;
     const pct = Math.round(met / filtered.length * 100);
     const color = pct >= 75 ? '#2E7D52' : pct >= 50 ? '#D97706' : '#C94136';
@@ -381,16 +413,19 @@ function renderCompliance() {
       </div>`;
   }).join('');
   
-  // School rows
+  // School rows. A blank value renders as a neutral grey "not yet entered" dot
+  // rather than a red ✗, so an empty row doesn't look like a wall of failures.
   const rows = filtered.map(s => {
     const cells = items.map(item => {
-      const met = item.check(s[item.key]);
-      const bg = met ? '#2E7D52' : '#C94136';
-      const sym = met ? '✓' : '✗';
+      const raw = s[item.key];
+      const blank = isBlank(raw);
+      const met = item.check(raw);
+      const bg = blank ? NEUTRAL_DOT : met ? '#2E7D52' : '#C94136';
+      const sym = blank ? '–' : met ? '✓' : '✗';
       let detail = '';
-      if (item.key === 'welcome_calls_pct') detail = fmtPct(s[item.key]);
-      else if (item.key === 'flc_status') detail = flcLabel(s[item.key]);
-      else if (item.key === 'newsletter_cadence') detail = s[item.key] || '—';
+      if (item.key === 'welcome_calls_pct') detail = blank ? '—' : fmtPct(raw);
+      else if (item.key === 'flc_status') detail = blank ? '—' : flcLabel(raw);
+      else if (item.key === 'newsletter_cadence') detail = raw || '—';
       return `<td style="text-align:center"><span class="comp-dot" style="background:${bg}">${sym}</span><div style="font-size:9px;color:var(--muted);margin-top:2px">${detail}</div></td>`;
     }).join('');
     
@@ -455,13 +490,17 @@ function renderDetail() {
   ).join('');
   
   // Compliance
+  // Blank (not-yet-entered) values render neutral rather than as a red fail.
+  // Events Logged intentionally stays a red ✗ at zero — per Charisse's rule that
+  // ✗ should flag schools with nothing logged.
+  const fu = school.latestSurvey?.followup_sent;
   const compItems = [
-    { label: 'Welcome Calls', met: school.welcome_calls_pct >= 0.70, detail: fmtPct(school.welcome_calls_pct) },
-    { label: 'Newsletters', met: !!(school.newsletter_cadence && !/running/i.test(school.newsletter_cadence)), detail: school.newsletter_cadence || '—' },
-    { label: 'FLC Active', met: school.flc_status === 'yes' ? true : school.flc_status === 'in process' ? null : false, detail: flcLabel(school.flc_status) },
-    { label: 'Unit Letters', met: String(school.unit_letters_sent).toLowerCase() === 'yes', detail: school.unit_letters_sent || '—' },
-    { label: 'Title I Meeting', met: String(school.title1_meeting_held).toLowerCase() === 'yes', detail: school.title1_meeting_held || '—' },
-    { label: 'Survey Follow-Up', met: school.latestSurvey?.followup_sent === 'yes', detail: school.latestSurvey?.followup_sent === 'yes' ? 'Sent' : 'Not sent' },
+    { label: 'Welcome Calls', met: isBlank(school.welcome_calls_pct) ? 'blank' : school.welcome_calls_pct >= 0.70, detail: isBlank(school.welcome_calls_pct) ? '—' : fmtPct(school.welcome_calls_pct) },
+    { label: 'Newsletters', met: isBlank(school.newsletter_cadence) ? 'blank' : !!(school.newsletter_cadence && !/running/i.test(school.newsletter_cadence)), detail: school.newsletter_cadence || '—' },
+    { label: 'FLC Active', met: isBlank(school.flc_status) ? 'blank' : school.flc_status === 'yes' ? true : school.flc_status === 'in process' ? null : false, detail: isBlank(school.flc_status) ? '—' : flcLabel(school.flc_status) },
+    { label: 'Unit Letters', met: isBlank(school.unit_letters_sent) ? 'blank' : String(school.unit_letters_sent).toLowerCase() === 'yes', detail: school.unit_letters_sent || '—' },
+    { label: 'Title I Meeting', met: isBlank(school.title1_meeting_held) ? 'blank' : String(school.title1_meeting_held).toLowerCase() === 'yes', detail: school.title1_meeting_held || '—' },
+    { label: 'Survey Follow-Up', met: isBlank(fu) ? 'blank' : fu === 'yes', detail: isBlank(fu) ? '—' : fu === 'yes' ? 'Sent' : 'Not sent' },
     { label: 'Events Logged', met: school.eventCount > 0, detail: `${school.eventCount} events` },
   ];
   const compHtml = compItems.map(c => renderCompRow(c.label, c.met, c.detail)).join('');

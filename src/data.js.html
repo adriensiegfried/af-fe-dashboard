@@ -117,6 +117,17 @@ function fmtNum(val) {
   return n.toLocaleString();
 }
 
+// True when a value has not been entered yet (blank), as distinct from a real
+// value of 0 / "no". Used to render a neutral "not yet entered" state instead of
+// a red fail when the Sheet is empty (e.g. at the start of a fresh school year).
+function isBlank(val) {
+  return val === '' || val === null || val === undefined;
+}
+
+// Neutral grey used for "no data yet" states across the dashboard.
+const NEUTRAL_COLOR = '#94A3B8';
+const NEUTRAL_DOT = '#CBD5E1';
+
 // ── Data Access Helpers ───────────────────────────────────────────────────────
 
 function schoolsByRegion(region) {
