@@ -31,6 +31,7 @@ There is no build step, linter, or test framework. The app runs entirely in Goog
 **Server-side (`.gs` files):**
 - `Code.gs` — Entry point. `doGet()` serves the HTML, `include()` injects partials, `getRefreshedData()` is client-callable for refresh.
 - `DataService.gs` — `loadAllData()` reads all Sheet tabs, enriches school objects with attendance/demographics/compliance/survey/event aggregates, and caches results (10min TTL via `CacheService`, 100KB limit).
+- `YearReset.gs` — Annual archive-and-reset utilities, run manually from the Apps Script editor. `archiveCurrentYear()` snapshots the data Sheet to a dated read-only copy; `resetForNewYear()` archives then clears the year-data tabs (guarded by the `CONFIRM_RESET` flag), preserving `schools`/`config`/`type_crosswalk`.
 
 **Client-side (`.js.html` files served as `<script>` blocks via `<?!= include() ?>`):**
 - `data.js.html` — Parses the injected JSON into the `DATA` global. Contains color/status logic (survey validity thresholds, ADA, chronic absence, FLC status), formatting helpers (`fmtPct`, `fmtDate`, `fmtNum`), and data access helpers (filter by region/level, compute averages).
@@ -49,6 +50,8 @@ There is no build step, linter, or test framework. The app runs entirely in Goog
 - **The `type_crosswalk` tab** maps legacy event type names to canonical names.
 - **Enrollment events** are treated differently from other event types: count-based display (families reached) instead of percentage-based.
 - **School enrichment** in `enrichSchools()` is the core data join — it merges attendance, demographics, compliance, surveys, and events onto each school object by `acronym`.
+- **Server files must be `.gs`, not `.js`** — clasp pushes both as server scripts, so a `Foo.gs` and a `Foo.js` collide on the same script name and break `clasp push`. Keep the `.gs` version only. (Client partials keep the `.js.html` extension.)
+- **Empty / fresh-year states render neutral, not red** — un-entered values show a neutral grey "not yet entered" state (`isBlank()` plus `NEUTRAL_COLOR`/`NEUTRAL_DOT`, all in `data.js.html`) rather than a red fail, so a freshly reset dashboard reads as unstarted while schools' data builds out. Events Logged is the one intentional exception — it stays a red ✗ at zero, per the stakeholder's rule that ✗ should flag schools with nothing logged.
 
 ## Data Source
 
