@@ -13,7 +13,7 @@ function loadAllData() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const cache = CacheService.getScriptCache();
   
-  // Check cache first (10-minute TTL; see cache.put below)
+  // Check cache first (60-second TTL; see cache.put below)
   const cached = cache.get('dashboardData');
   if (cached) {
     try {
@@ -45,11 +45,13 @@ function loadAllData() {
   data.meta.schoolCount = data.schools.length;
   data.meta.eventCount = data.events.length;
   
-  // Cache for 10 minutes (Apps Script cache max is 6 hours)
+  // Cache for 60 seconds. Short enough that a plain reload picks up a Sheet
+  // edit almost immediately during data-entry season, long enough to absorb
+  // bursts of page loads. The Refresh Data button bypasses this entirely.
   try {
     const json = JSON.stringify(data);
     if (json.length < 100000) { // Cache limit is 100KB per key
-      cache.put('dashboardData', json, 600);
+      cache.put('dashboardData', json, 60);
     }
   } catch (e) {
     // Data too large for cache, skip

@@ -4,12 +4,14 @@
  * Client-side data helpers, color logic, and formatting utilities.
  */
 
-const DATA = typeof DASHBOARD_DATA_RAW === 'string' ? JSON.parse(DASHBOARD_DATA_RAW) : DASHBOARD_DATA_RAW;
+// Declared with `let`, not `const` — refreshData() in app.js swaps these in
+// place when the user pulls a fresh payload from the Sheet.
+let DATA = typeof DASHBOARD_DATA_RAW === 'string' ? JSON.parse(DASHBOARD_DATA_RAW) : DASHBOARD_DATA_RAW;
 
 // ── Color & Status Logic ──────────────────────────────────────────────────────
 
-const GOALS = DATA.config.goals;
-const TYPO = DATA.config.typology;
+let GOALS = DATA.config.goals;
+let TYPO = DATA.config.typology;
 
 function surveyColor(pct) {
   if (pct >= (GOALS.survey_participation_goal || 0.75)) return '#2E7D52';

@@ -536,7 +536,54 @@ function renderDetail() {
     </div>`;
 }
 
+// ── Data Refresh ──────────────────────────────────────────────────────────────
+
+// The payload is cached server-side, so the header shows when it was actually
+// built. Without this a school can enter data, reload, see nothing change, and
+// have no way to tell whether the page is stale or their entry did not save.
+function setLastUpdated() {
+  const el = document.getElementById('last-updated');
+  if (!el) return;
+  const ts = DATA.meta && DATA.meta.lastRefreshed;
+  const d = ts ? new Date(ts) : null;
+  el.textContent = d && !isNaN(d)
+    ? 'Updated ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : '';
+}
+
+// Pulls a fresh payload straight from the Sheet. getRefreshedData() drops the
+// server-side cache first, so this always reflects the current Sheet contents.
+function refreshData() {
+  const btn = document.getElementById('btn-refresh');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Refreshing…';
+  }
+
+  google.script.run
+    .withSuccessHandler(function (json) {
+      DATA = JSON.parse(json);
+      GOALS = DATA.config.goals;
+      TYPO = DATA.config.typology;
+      setLastUpdated();
+      render();
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Refresh Data';
+      }
+    })
+    .withFailureHandler(function (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Retry Refresh';
+      }
+      console.error('Refresh failed:', err);
+    })
+    .getRefreshedData();
+}
+
 // ── Initialize ────────────────────────────────────────────────────────────────
 
 render();
+setLastUpdated();
 </script>
