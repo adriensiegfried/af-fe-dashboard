@@ -13,7 +13,7 @@ function loadAllData() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const cache = CacheService.getScriptCache();
   
-  // Check cache first (6-hour TTL)
+  // Check cache first (10-minute TTL; see cache.put below)
   const cached = cache.get('dashboardData');
   if (cached) {
     try {

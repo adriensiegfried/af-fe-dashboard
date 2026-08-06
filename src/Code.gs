@@ -32,7 +32,10 @@ function include(filename) {
 
 /**
  * Client-callable function to refresh data without full page reload.
+ * Drops the cached payload first — otherwise loadAllData() would just return
+ * the same cached copy and the refresh would be a no-op for up to 10 minutes.
  */
 function getRefreshedData() {
+  CacheService.getScriptCache().remove('dashboardData');
   return JSON.stringify(loadAllData());
 }
