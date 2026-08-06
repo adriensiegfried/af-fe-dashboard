@@ -310,15 +310,16 @@ function renderEvents() {
     
     // Percentage-based types
     const pcts = evts.filter(e => e.pct_attended).map(e => e.pct_attended);
-    const avgPct = pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : 0;
+    const hasPcts = pcts.length > 0;
+    const avgPct = hasPcts ? pcts.reduce((a, b) => a + b, 0) / pcts.length : null;
     const schoolCount = new Set(evts.map(e => e.acronym)).size;
     
     return `
       <div class="card" style="border-top:3px solid ${color}">
         <div style="font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">${typeName}</div>
-        <div style="font-size:26px;font-weight:800;color:${color}">${fmtPct(avgPct)}</div>
+        <div style="font-size:26px;font-weight:800;color:${hasPcts ? color : NEUTRAL_COLOR}">${fmtPct(avgPct)}</div>
         <div style="font-size:11px;color:var(--muted)">${evts.length} events · ${schoolCount} schools</div>
-        ${renderBar(avgPct, benchmarkColor(avgPct, typeName), 6)}
+        ${renderBar(avgPct, hasPcts ? benchmarkColor(avgPct, typeName) : NEUTRAL_DOT, 6)}
         <div style="font-size:10px;color:var(--muted);margin-top:4px">Benchmark: ${fmtPct(b.lo)}–${fmtPct(b.hi)}</div>
       </div>`;
   }).join('');

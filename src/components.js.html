@@ -112,7 +112,7 @@ function renderSchoolRow(school, onclick) {
       <td style="text-align:center">${partPct !== undefined && partPct !== '' ? renderBadge(fmtPct(partPct), surveyColor(partPct), surveyBg(partPct)) : '—'}</td>
       <td style="text-align:center">${favPct !== undefined && favPct !== '' ? `<span style="font-weight:700;opacity:${favOpacity}">${fmtPct(favPct)}</span>` : '—'}</td>
       <td style="text-align:center">${trendHtml}</td>
-      <td style="text-align:center"><span style="color:${flcColor(school.flc_status)};font-weight:700;font-size:11px">${flcLabel(school.flc_status)}</span></td>
+      <td style="text-align:center">${!isBlank(school.flc_status) ? `<span style="color:${flcColor(school.flc_status)};font-weight:700;font-size:11px">${flcLabel(school.flc_status)}</span>` : '—'}</td>
       <td style="text-align:center;color:var(--muted);font-size:12px">${school.eventCount}</td>
     </tr>`;
 }
