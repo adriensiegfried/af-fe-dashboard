@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AF Family Engagement Dashboard — a Google Apps Script web app for Achievement First's Team Systems & Data team. It reads live data from a structured Google Sheet and renders an S&D-branded dashboard covering 3 regions (CT, NY, RI) and 39 schools.
+AF Family Engagement Dashboard — a Google Apps Script web app for Achievement First's Team Systems & Data team. It reads live data from a structured Google Sheet and renders an S&D-branded dashboard covering 3 regions (CT, NY, RI) and 41 schools.
 
 ## Deployment Commands
 

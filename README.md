@@ -2,7 +2,7 @@
 
 **Team Systems & Data · Achievement First**
 
-A Google Apps Script web app that reads live data from a structured Google Sheet and renders an S&D-branded dashboard covering all 3 regions (CT, NY, RI) and 39 schools.
+A Google Apps Script web app that reads live data from a structured Google Sheet and renders an S&D-branded dashboard covering all 3 regions (CT, NY, RI) and 41 schools.
 
 ## Architecture
 
